@@ -96,7 +96,7 @@ typedef uint16_t in_port_t;
 
 #if ! defined (WIN32) && ! defined (__FreeBSD__)
 	#include "vma-redirect.h"
-	//#define USING_VMA_EXTRA_API
+	#define USING_VMA_EXTRA_API
 	#ifdef  USING_VMA_EXTRA_API
 	#include <mellanox/vma_extra.h>
 	#endif

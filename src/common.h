@@ -121,6 +121,7 @@ static inline int msg_recvfrom(int fd, uint8_t* buf, int nbytes, struct sockaddr
 				}
 			}
 			else {
+				printf("RAFI NO zero copy\n");
 				data_to_copy = _min(remain_buffer, ret);
 				memcpy(buf + (nbytes - remain_buffer), g_pkt_buf, data_to_copy);
 				ret = nbytes - (remain_buffer - data_to_copy);
