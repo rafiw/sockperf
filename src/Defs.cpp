@@ -29,7 +29,7 @@
 #include "Defs.h"
 #include "Message.h"
 #include "PacketTimes.h"
-
+#include <iostream>
 /* Global variables */
 bool g_b_exit = false;
 bool g_b_errorOccured = false;
@@ -42,10 +42,24 @@ TicksTime g_cycleStartTime;
 debug_level_t g_debug_level = LOG_LVL_INFO;
 
 #ifdef  USING_VMA_EXTRA_API
-unsigned char* g_pkt_buf = NULL;
-struct vma_packets_t* g_pkts = NULL;
-unsigned int g_pkt_index = 0;
-unsigned int g_pkt_offset = 0;
+
+ZeroCopyData::ZeroCopyData() {
+	g_pkt_buf = NULL;
+	std::cout<<"IN CTOR"<<Message::getMaxSize()<<std::endl;
+	g_pkt_index = 0;
+	g_pkt_offset = 0;
+	g_pkts = NULL;
+};
+
+void ZeroCopyData::allocate() {
+	g_pkt_buf = new unsigned char[Message::getMaxSize()];
+}
+ZeroCopyData::~ZeroCopyData() {
+	if (g_pkt_buf)
+		delete[] this->g_pkt_buf;
+}
+
+zeroCopyMap g_zeroCopyData;
 #endif
 
 

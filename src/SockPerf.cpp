@@ -2188,8 +2188,10 @@ void cleanup()
 		FREE(s_user_params.select_timeout);
 	}
 #ifdef  USING_VMA_EXTRA_API
-	if (g_pkt_buf) {
-		FREE(g_pkt_buf);
+	if (s_user_params.is_vmazcopyread && g_vma_api) {
+		for (int i = s_fd_min; i < s_fd_max; i++) {
+			delete g_zeroCopyData[i];
+		}
 	}
 #endif
 
@@ -2344,7 +2346,8 @@ vma_recv_callback_retval_t myapp_vma_recv_pkt_filter_callback(
 	}
 
 	//If there is data in local buffer, then push new packet in TCP queue.Otherwise handle received packet inside callback.
-	if (g_pkts && g_pkts->n_packet_num > 0) {
+	if (g_zeroCopyData[fd]->g_pkts &&
+		g_zeroCopyData[fd]->g_pkts->n_packet_num > 0) {
 		return VMA_PACKET_RECV;
 	}
 
@@ -3242,12 +3245,6 @@ int bringup(const int *p_daemonize)
 		int _max_buff_size = _max(s_user_params.msg_size + 1, _vma_pkts_desc_size);
 		_max_buff_size = _max(_max_buff_size, MAX_PAYLOAD_SIZE);
 
-#ifdef  USING_VMA_EXTRA_API
-		if (s_user_params.is_vmazcopyread && g_vma_api){
-			g_pkt_buf = (unsigned char*)MALLOC(_max_buff_size);
-		}
-#endif
-
 		int64_t cycleDurationNsec = NSEC_IN_SEC * s_user_params.burst_size / s_user_params.mps;
 
 		if (s_user_params.mps == UINT32_MAX) { // MAX MPS mode
@@ -3299,7 +3296,14 @@ void do_test()
 	info.fd_min = s_fd_min;
 	info.fd_max = s_fd_max;
 	info.fd_num = s_fd_num;
-
+#ifdef  USING_VMA_EXTRA_API
+	if (s_user_params.is_vmazcopyread && g_vma_api) {
+		for (int i = s_fd_min; i < s_fd_max; i++) {
+			g_zeroCopyData[i] = new ZeroCopyData();
+			g_zeroCopyData[i]->allocate();
+		}
+	}
+#endif
 	switch (s_user_params.mode) {
 	case MODE_CLIENT:
 		client_handler(&info);
