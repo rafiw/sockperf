@@ -132,7 +132,7 @@ private:
 	}
 
 	//------------------------------------------------------------------------------
-	inline unsigned int client_receive_from_selected(int ifd)
+	inline unsigned int client_receive_from_selected(int ifd, int ring_fd)
 	{
 		int ret = 0;
 		struct sockaddr_in recvfrom_addr;
@@ -141,7 +141,7 @@ private:
 
 		TicksTime rxTime;
 
-		ret = msg_recvfrom(ifd,
+		ret = msg_recvfrom(ring_fd,
 				           g_fds_array[ifd]->recv.cur_addr + g_fds_array[ifd]->recv.cur_offset,
 				           g_fds_array[ifd]->recv.cur_size,
 				           &recvfrom_addr);
@@ -286,6 +286,10 @@ private:
 		int actual_fd = 0;
 		for (int _fd = m_ioHandler.get_look_start(); _fd < m_ioHandler.get_look_end() && !g_b_exit; _fd++) {
 			actual_fd = m_ioHandler.analyzeArrival(_fd);
+#if MP_RQ
+			int res[2];
+			g_vma_api->get_socket_rings_fds(actual_fd, res, 2);
+#endif
 			if (actual_fd){
 				int m_recived = g_pApp->m_const_params.max_looping_over_recv;
 				while (( 0 != m_recived ) && (!g_b_exit))
@@ -294,7 +298,7 @@ private:
 					{
 						m_recived--;
 					}
-					unsigned int recieved_packets = client_receive_from_selected(actual_fd/*, packet_cnt_index*/);
+					unsigned int recieved_packets = client_receive_from_selected(actual_fd, res[0]/*, packet_cnt_index*/);
 					if ( (0 == recieved_packets) && (os_err_eagain()))
 					{
 						break ;

@@ -300,7 +300,7 @@ int Server<IoType, SwitchActivityInfo, SwitchCalcGaps>::server_accept(int ifd)
     		 */
     		if ( (active_ifd < MAX_FDS_NUM) &&
         	     (g_fds_array[ifd]->active_fd_count < (MAX_ACTIVE_FD_NUM - 1)) ) {
-			if (prepare_socket(active_ifd, tmp) != (int)INVALID_SOCKET) { // TODO: use SOCKET all over the way and avoid this cast
+			if (prepare_socket(active_ifd, tmp,1) != (int)INVALID_SOCKET) { // TODO: use SOCKET all over the way and avoid this cast
 				int *active_fd_list = g_fds_array[ifd]->active_fd_list;
 				int i = 0;
 

@@ -52,6 +52,37 @@ int read_int_from_sys_file(const char *path);
 //------------------------------------------------------------------------------
 static inline int msg_recvfrom(int fd, uint8_t* buf, int nbytes, struct sockaddr_in *recvfrom_addr)
 {
+	int size = 0;
+	int flags = 0;
+	uint8_t* start_addrs;
+	int remain_buffer;
+
+	remain_buffer = nbytes;
+	vma_completion_cb_t completion;
+	completion.comp_mask = 0;
+	socklen_t sock_size = sizeof(struct sockaddr_in);
+	while (size <= nbytes) {
+		completion.packets = 0;
+		int ret = g_vma_api->vma_cyclic_buffer_read_one(fd, &completion, (sockaddr*)recvfrom_addr, flags);
+		if (ret < 0)
+			exit(-1);
+		if (completion.packets == 0)
+			return size;
+		// headers
+		completion.payload_length-=42;
+		completion.payload_ptr+=42;
+		size+=completion.payload_length;
+		start_addrs = buf + (nbytes - remain_buffer);
+		memcpy(start_addrs, completion.payload_ptr, completion.payload_length);
+		remain_buffer -= completion.payload_length;
+		start_addrs += completion.payload_length;
+	}
+	return size;
+
+
+}
+static inline int msg_recvfrom_old(int fd, uint8_t* buf, int nbytes, struct sockaddr_in *recvfrom_addr)
+{
 	int ret = 0;
 	socklen_t size = sizeof(struct sockaddr_in);
 	int flags = 0;
@@ -195,7 +226,6 @@ static inline int msg_recvfrom(int fd, uint8_t* buf, int nbytes, struct sockaddr
 
 	return ret;
 }
-
 //------------------------------------------------------------------------------
 static inline int msg_sendto(int fd, uint8_t* buf, int nbytes, const struct sockaddr_in *sendto_addr)
 {

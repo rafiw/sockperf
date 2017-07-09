@@ -100,11 +100,11 @@ static int s_fd_num = 0;
 static struct mutable_params_t s_mutable_params;
 
 static void set_select_timeout(int time_out_msec);
-static int set_sockets_from_feedfile(const char *feedfile_name);
+static int set_sockets_from_feedfile(const char *feedfile_name,vma_ring_profile_key prof);
 #ifdef ST_TEST
 int prepare_socket(int fd, struct fds_data *p_data, bool stTest = false);
 #else
-int prepare_socket(int fd, struct fds_data *p_data);
+int prepare_socket(int fd, struct fds_data *p_data,vma_ring_profile_key prof=1);
 #endif
 void cleanup();
 
@@ -2740,7 +2740,7 @@ int sock_set_multicast(int fd, struct fds_data *p_data)
 #ifdef ST_TEST
 int prepare_socket(int fd, struct fds_data *p_data, bool stTest = false)
 #else
-int prepare_socket(int fd, struct fds_data *p_data)
+int prepare_socket(int fd, struct fds_data *p_data, vma_ring_profile_key prof)
 #endif
 {
 	int rc = SOCKPERF_ERR_NONE;
@@ -2763,7 +2763,18 @@ int prepare_socket(int fd, struct fds_data *p_data)
 			rc = SOCKPERF_ERR_SOCKET;
 		}
 	}
+#ifdef MP_RQ
+	vma_ring_alloc_logic_attr profile;
+	profile.engress = 0;
+	profile.ingress = 1;
+	profile.ring_profile_key = prof;
+	profile.comp_mask = VMA_RING_ALLOC_MASK_RING_PROFILE_KEY |
+						VMA_RING_ALLOC_MASK_RING_INGRESS;
+	// if we want several Fd's per ring, we need to assign RING_LOGIC_PER_THREAD / RING_LOGIC_PER_CORE
+	profile.ring_alloc_logic = RING_LOGIC_PER_SOCKET;
 
+	rc = setsockopt(fd, SOL_SOCKET, SO_VMA_RING_ALLOC_LOGIC, &profile, sizeof(profile));
+#endif
 	if (!rc &&
 			(s_user_params.withsock_accl == true))
 	{
@@ -2829,7 +2840,7 @@ int prepare_socket(int fd, struct fds_data *p_data)
 
 //------------------------------------------------------------------------------
 /* get IP:port pairs from the file and initialize the list */
-static int set_sockets_from_feedfile(const char *feedfile_name)
+static int set_sockets_from_feedfile(const char *feedfile_name,vma_ring_profile_key prof)
 {
 	int rc = SOCKPERF_ERR_NONE;
 	FILE *file_fd = NULL;
@@ -3030,7 +3041,7 @@ static int set_sockets_from_feedfile(const char *feedfile_name)
 				}
 				if ( curr_fd >=0 ) {
 					if ( (curr_fd >= MAX_FDS_NUM) ||
-							(prepare_socket(curr_fd, tmp) == (int)INVALID_SOCKET) ) { // TODO: use SOCKET all over the way and avoid this cast
+							(prepare_socket(curr_fd, tmp, prof) == (int)INVALID_SOCKET) ) { // TODO: use SOCKET all over the way and avoid this cast
 						log_err("Invalid socket");
 						close(curr_fd);
 						rc = SOCKPERF_ERR_SOCKET;
@@ -3106,7 +3117,7 @@ static int set_sockets_from_feedfile(const char *feedfile_name)
 			}
 			tmp->sock_type = sock_type;
 			tmp->is_multicast = IN_MULTICAST(ntohl(tmp->server_addr.sin_addr.s_addr));
-			st1 = prepare_socket(tmp, true);
+			st1 = prepare_socket(tmp, true,0);
 
 			tmp = &data2;
 			memset(tmp,0,sizeof(struct fds_data));
@@ -3118,7 +3129,7 @@ static int set_sockets_from_feedfile(const char *feedfile_name)
 			}
 			tmp->sock_type = sock_type;
 			tmp->is_multicast = IN_MULTICAST(ntohl(tmp->server_addr.sin_addr.s_addr));
-			st2 = prepare_socket(tmp, true);
+			st2 = prepare_socket(tmp, true,0);
 
 		}
 #endif
@@ -3154,9 +3165,9 @@ int bringup(const int *p_daemonize)
 	
 	/* Setup VMA */
 	int _vma_pkts_desc_size = 0;
-	if ( !rc &&
-			(s_user_params.is_vmarxfiltercb || s_user_params.is_vmazcopyread)) {
-#ifdef  USING_VMA_EXTRA_API
+//	if ( !rc &&
+	//		(s_user_params.is_vmarxfiltercb || s_user_params.is_vmazcopyread)) {
+#if defined( USING_VMA_EXTRA_API) || defined(MP_RQ)
 		// Get VMA extended API
 		g_vma_api = vma_get_api();
 		if (g_vma_api == NULL)
@@ -3168,8 +3179,26 @@ int bringup(const int *p_daemonize)
 #else
 		log_msg("This version is not compiled with VMA extra API");
 #endif
-	}
+	//}
 	
+	vma_ring_profile_key prof;
+	#ifdef MP_RQ
+
+		vma_ring_type_attr ring;
+		memset(&ring,0,sizeof(ring));
+		ring.ring_type = VMA_RING_CYCLIC_BUFFER;
+		// buffer size is 2^17 = 128MB
+		ring.ring_cyclicb.num = (1<<17);
+		// user packet size ( not including the un-scattered data
+		ring.ring_cyclicb.stride_bytes = 950;
+		//ring.ring_cyclicb.comp_mask = VMA_RING_TYPE_MASK;
+		int res2 = g_vma_api->vma_add_ring_profile(&ring, &prof);
+		if (res2) {
+			printf("failed adding ring profile");
+			exit(-1);
+		}
+
+	#endif
 	/* Create and initialize sockets */
 	if (!rc)
 	{
@@ -3177,7 +3206,7 @@ int bringup(const int *p_daemonize)
 
 		/* initialize g_fds_array array */
 		if (strlen(s_user_params.feedfile_name)) {
-			rc = set_sockets_from_feedfile(s_user_params.feedfile_name);
+			rc = set_sockets_from_feedfile(s_user_params.feedfile_name, prof);
 		}
 		else {
 			int curr_fd = (int)INVALID_SOCKET; // TODO: use SOCKET all over the way and avoid this cast
@@ -3207,7 +3236,7 @@ int bringup(const int *p_daemonize)
 					}
 					else {
 						if ( (curr_fd >= MAX_FDS_NUM) ||
-								(prepare_socket(curr_fd, tmp) == (int)INVALID_SOCKET) ) { // TODO: use SOCKET all over the way and avoid this cast
+								(prepare_socket(curr_fd, tmp, prof) == (int)INVALID_SOCKET) ) { // TODO: use SOCKET all over the way and avoid this cast
 							log_err("Invalid socket");
 							close(curr_fd);
 							rc = SOCKPERF_ERR_SOCKET;

@@ -45,7 +45,7 @@ typedef uint16_t in_port_t;
 #ifdef __linux__
 #include <features.h>
 #endif
-
+#define MP_RQ 1
 /* every file that use fd_set must include this section first for using big fd set size */
 #if  (__GLIBC__ > 2) || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 2)
 #include <bits/types.h>
@@ -98,7 +98,7 @@ typedef uint16_t in_port_t;
 
 #if ! defined (WIN32) && ! defined (__FreeBSD__)
 	#include "vma-redirect.h"
-	//#define USING_VMA_EXTRA_API
+	#define USING_VMA_EXTRA_API
 	#ifdef  USING_VMA_EXTRA_API
 	#include <mellanox/vma_extra.h>
 	#endif

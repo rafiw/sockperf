@@ -34,7 +34,7 @@
 #ifdef ST_TEST
 extern int prepare_socket(int fd, struct fds_data *p_data, bool stTest = false);
 #else
-extern int prepare_socket(int fd, struct fds_data *p_data);
+extern int prepare_socket(int fd, struct fds_data *p_data, vma_ring_profile_key prof=1);
 #endif
 
 
@@ -168,9 +168,13 @@ inline bool Server<IoType, SwitchActivityInfo, SwitchCalcGaps>::server_receive_t
 	bool do_update = true;
 	int ret = 0;
 	fds_data* l_fds_ifd = g_fds_array[ifd];
+	int tmp_fd;
 	if (!l_fds_ifd)
 		return (do_update);
-	ret = msg_recvfrom(ifd,
+#if MP_RQ
+		g_vma_api->get_socket_rings_fds(ifd, &tmp_fd, 1);
+#endif
+	ret = msg_recvfrom(tmp_fd,
 			           l_fds_ifd->recv.cur_addr + l_fds_ifd->recv.cur_offset,
 			           l_fds_ifd->recv.cur_size,
 			           &recvfrom_addr);
